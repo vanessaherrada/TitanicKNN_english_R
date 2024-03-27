@@ -1,0 +1,930 @@
+---
+title: "Titanic KNN (English version)"
+author: "Vanessa Herrada Saavedra"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+    css: styles.css
+    fig_width: 8
+    fig_height: 6
+    fig_caption: true
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: yes
+    latex_engine: xelatex
+    fig_width: 6
+    fig_height: 4
+    fig_caption: yes
+    citation_package: natbib
+    keep_tex: yes
+---
+```{r setup, include = FALSE}
+# Common Chunk Adjustments
+knitr::opts_chunk$set(fig.width = 8, fig.asp = 1, out.width = "100%",
+                      message = FALSE, warning = FALSE,
+                      echo = TRUE, res = 400)
+```
+
+# Context and Exploratory Analysis
+
+**The Titanic Disaster: A Historical Perspective**
+
+The RMS Titanic, an impressive British ocean liner, held the title of being the largest passenger ship of its time. However, its maiden voyage was marred by an unprecedented tragedy. In the fateful early morning of April 15, 1912, while en route to New York, the RMS Titanic collided with an iceberg and quickly sank into the icy waters of the North Atlantic. This tragic event claimed the lives of 1,496 people out of the 2,208 on board, despite the ship having a theoretical capacity to accommodate up to 3,547 passengers. Survivors were rescued hours later by the transatlantic liner RMS Carpathia, in a rescue operation that moved the entire world.
+
+### Objective
+
+The fundamental purpose of this study lies in predicting the survival of passengers involved in the Titanic disaster, using machine learning techniques, specifically through the k-nearest neighbors algorithm.
+
+This challenge, extracted from: Kaggle (https://www.kaggle.com/competitions/titanic/overview), poses the task of employing machine learning to develop a model capable of predicting which passengers managed to survive the Titanic shipwreck.
+
+```{r}
+# Delete
+rm(list = ls())
+```
+
+```{r}
+# Packages
+if (!require("Amelia")) install.packages("Amelia")
+if (!require("C50")) install.packages("C50")
+if (!require("doParallel")) install.packages("doParallel")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("fastDummies")) install.packages("fastDummies")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("ggridges")) install.packages("ggridges")
+if (!require("ggthemes")) install.packages("ggthemes")
+if (!require("glue")) install.packages("glue")
+if (!require("hrbrthemes")) install.packages("hrbrthemes")
+if (!require("IRdisplay")) install.packages("IRdisplay")
+if (!require("kknn")) install.packages("kknn")
+if (!require("lubridate")) install.packages("lubridate")
+if (!require("naniar")) install.packages("naniar")
+if (!require("parallel")) install.packages("parallel")
+if (!require("parsnip")) install.packages("parsnip")
+if (!require("recipes")) install.packages("recipes")
+if (!require("rlang")) install.packages("rlang")
+if (!require("rpart")) install.packages("rpart")
+if (!require("rpart.plot")) install.packages("rpart.plot")
+if (!require("rsample")) install.packages("rsample")
+if (!require("scales")) install.packages("scales")
+if (!require("showtext")) install.packages("showtext")
+if (!require("skimr")) install.packages("skimr")
+if (!require("themis")) install.packages("themis")
+if (!require("tibble")) install.packages("tibble")
+if (!require("tidymodels")) install.packages("tidymodels")
+if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("vip")) install.packages("vip")
+if (!require("viridis")) install.packages("viridis")
+if (!require("workflows")) install.packages("workflows")
+
+library(Amelia)
+library(C50)
+library(doParallel)
+library(dplyr)
+library(fastDummies)
+library(ggplot2)
+library(ggridges)
+library(ggthemes)
+library(glue)
+library(hrbrthemes)
+library(IRdisplay)
+library(kknn)
+library(lubridate)
+library(naniar)
+library(parallel)
+library(parsnip)
+library(recipes)
+library(rlang)
+library(rpart)
+library(rpart.plot)
+library(rsample)
+library(scales)
+library(showtext)
+library(skimr)
+library(themis)
+library(tibble)
+library(tidymodels)
+library(tidyverse)
+library(vip)
+library(viridis)
+library(workflows)
+
+font_add_google("Lobster Two", "lobstertwo")
+font_add_google("Poppins", "poppins")
+showtext_auto()
+```
+
+### Data loading
+
+The data was obtained from the website: https://www.kaggle.com/competitions/titanic/overview previously mentioned.
+
+```{r}
+# Dataset
+titanic_train <- read.csv("C:/Users/vanny/OneDrive/Escritorio/Portfolio/titanic_train.csv")
+titanic_test <- read.csv("C:/Users/vanny/OneDrive/Escritorio/Portfolio/titanic_test.csv")
+```
+
+### Exploratory Analysis
+
+In general terms, we have a dataset divided into two parts: one intended for model training, called "train," and another for evaluation, called "test." The "train" set consists of 891 observations and 11 variables, in addition to the target variable 'Survived,' while the "test" set contains 418 observations, with the same 11 variables but excluding the target variable.
+
+The variables provide the following information:
+<ul>
+- Survived: Represents whether the passenger survived (1) or not (0). This is the target variable we seek to predict.
+- PassengerId: Unique identification of each crew member, simply being an identification number.
+- Pclass: Indicates the class in which the passengers traveled: first, second, or third class.
+- Name: Passenger's name.
+- Sex: Passenger's gender, being male or female. To simplify the analysis, it could be converted into a binary variable.
+- Age: Passenger's age in years.
+- SibSp: Number of siblings or spouses aboard the Titanic.
+- Parch: Number of parents or children aboard the Titanic. For children traveling only with their nanny, this variable is 0.
+- Ticket: Ticket number.
+- Fare: Ticket cost.
+- Cabin: Cabin number, with alphanumeric values, but with a significant amount of null values.
+- Embarked: Port of embarkation, with the following designations:
+<ul>
+- C=Cherbourg
+- Q=Queenstown
+- S=Southampton.
+</ul>
+</ul>
+
+#### Exploratory Analysis of the "Train" Set
+
+An analysis of the "train" set is conducted to examine the relationships between the target variable and the other variables:
+
+It is observed that only 38% of the crew members managed to survive, which amounts to 342 people, while the remaining 62% perished, totaling 549 individuals.
+
+```{r}
+# Survivors 
+titanic_train %>% count(Survived) %>% mutate(porc=100*n/sum(n))
+```
+
+**Pclass vs Survived**
+
+For the deceased passengers (Survived = 0):
+<ul>
+- The most represented class is the third class (Pclass = 3) with 372 passengers, constituting approximately 67.76% of the total deceased.</li>
+- It is followed by the second class (Pclass = 2) with 97 passengers, representing around 17.67% of the total deceased.</li>
+- The first class (Pclass = 1) has the fewest deceased, with 80 passengers, corresponding to 14.57% of the total deceased.
+</ul>
+For the surviving passengers (Survived = 1):
+<ul>
+- The first class (Pclass = 1) has the highest number of survivors, with 136 passengers, representing approximately 39.77% of the total survivors.
+- Next, the third class (Pclass = 3) has 119 survivors, constituting around 34.80% of the total survivors.
+- The second class (Pclass = 2) has the fewest survivors, with 87 passengers, representing approximately 25.44% of the total survivors.
+</ul>
+This analysis reveals the distribution of deceased and surviving passengers according to their class on the Titanic. There is a clear disparity in survival rates among the different classes, with the first class having the highest proportion of survivors and the third class the lowest proportion.
+
+```{r}
+# Survived vs Pclass
+titanic_train %>% group_by(Survived) %>% count(Pclass) %>%  mutate("Percentage (%)"=100*n/sum(n))
+```
+
+The graph is shown below:
+
+```{r}
+# Graph Survived vs Pclass
+graph_pclass <- mosaicplot(table(titanic_train$Pclass, titanic_train$Survived),
+  col = c("#CDE4C0", "#F3F579"),
+  xlab = "Sex",
+  ylab = "Survived",
+  main = "Pclass vs Survived",
+  sub = "0 = died, 1 = survived") 
+```
+
+**Sex vs Survived**
+
+Among the survivors, 68% were women and 32% were men. In contrast, among the deceased, 15% were women and 85% were men. These data clearly reflect a pattern suggesting prioritization in the rescue of women, which aligns with the historical practice of giving preference to the evacuation of women and children in maritime emergency situations.
+
+This behavior can be observed in the following table:
+
+```{r}
+# Survived vs Sex
+titanic_train %>% group_by(Survived) %>% count(Sex) %>%  mutate("Percentage (%)"=100*n/sum(n))
+```
+
+This trend is clearly visualized in the following bar graph:
+
+```{r}
+# Graph Survived vs Sex
+graph_sex <- mosaicplot(table(titanic_train$Sex, titanic_train$Survived),
+  col = c("#CDE4C0", "#F3F579"),
+  xlab = "Sex",
+  ylab = "Survived",
+  main = "Sex vs Titanic Survival",
+  sub = "0 = died, 1 = survived") 
+```
+
+**Age vs Survived**
+
+The analysis of survival distribution by age groups reveals a series of significant patterns in the Titanic tragedy:
+<ul>
+- Among passengers aged 0 to 10 years, 61% survived, while 39% perished.
+- For those aged 10 to 20 years, 60% perished, while 40% survived.
+- In the 20 to 30 years age group, 65% were unable to be rescued, while only 35% survived.
+- The age bracket of 30 to 40 years stands out for having the highest number of survivors (44%), but also a considerable number of deceased (56%), excluding passengers whose ages were not recorded.
+- Among passengers aged 40 to 50 years, 62% did not survive, leaving only 38% survivors.
+- In the range of 50 to 60 years, 58% perished and 42% survived.
+- Passengers aged 60 to 70 years experienced a high mortality rate of 68%, while only 32% survived.
+- Tragically, all passengers aged 70 to 80 years perished.
+- On the other hand, among passengers aged 80 to 90 years, there was a single survivor, representing 100% of this group.
+- For those whose ages were not recorded, the mortality rate was 71%, with only 29% survivors.
+- Overall, except for the 0 to 10 years age group, it is observed that the number of deceased exceeds the number of survivors in all age ranges. This analysis offers a detailed perspective on how age influenced the chances of survival during the Titanic disaster.
+</ul>
+
+```{r}
+# Survived vs Age
+tabla_ages <- titanic_train %>%
+  mutate(age_group = cut(Age, breaks = seq(0, 100, by = 10), right = FALSE, include.lowest = TRUE)) %>%
+  group_by(age_group, Survived) %>%
+  summarise(n = n()) %>%
+  group_by(age_group) %>%
+  mutate("Percentage (%)" = 100 * n / sum(n))
+
+print(tabla_ages)
+```
+
+The following graph shows the relationship "Age vs Survived":
+
+```{r}
+# Graph Survived vs Age
+graph_age <- ggplot(tabla_ages, aes(x = age_group, y = `Percentage (%)`, fill = as.factor(Survived))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Age group", y = "Percentage (%)", fill = "Survived") +
+  ggtitle("Survived vs Age") +
+  scale_fill_manual(values = c("#CDE4C0", "#F3F579")) +
+  theme_minimal()
+
+print(graph_age)
+```
+
+
+**SibSp vs Survived**
+
+Among all the deceased, the following distribution is observed in relation to the number of siblings/spouses aboard:
+<ul>
+- Traveling without siblings/spouses: They represent 72.5% of the total.
+- Traveling with 1 sibling/spouse: They constitute 17.7% of the total.
+- Traveling with 2 siblings/spouses: They comprise 2.8% of the total.
+- Traveling with 3 siblings/spouses: They represent 2.2% of the total.
+- Traveling with 4 siblings/spouses: They encompass 2.7% of the total.
+- Traveling with 5 siblings/spouses: They form 0.9% of the total.
+- Traveling with 8 siblings/spouses: They represent 1.3% of the total.
+</ul>
+
+On the other hand, regarding the individuals who survived, they are distributed as follows according to the number of siblings/spouses aboard:
+<ul>
+- Traveling without siblings/spouses: They constitute 61.5% of the total survivors.
+- Traveling with 1 sibling/spouse: They represent 32.8%.
+- Traveling with 2 siblings/spouses: They encompass 3.8%.
+- Traveling with 3 siblings/spouses: They form 1.17%.
+- Traveling with 4 siblings/spouses: They represent 0.9%.
+</ul>
+
+```{r}
+# Survived vs SibSp
+titanic_train %>% group_by(Survived) %>% count(SibSp) %>%  mutate("Percentage (%)"=100*n/sum(n))
+```
+
+This visualization provides a clear perspective of the "Survived vs SibSp (siblings/spouses)" relationship:
+
+```{r}
+# Graph Survived vs SibSp
+titanic_train %>%
+  group_by(Survived, SibSp) %>%
+  summarise(n = n()) %>%
+  mutate("Percentage (%)" = 100 * n / sum(n)) %>%
+  ggplot(aes(x = as.factor(SibSp), y = `Percentage (%)`, fill = as.factor(Survived))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Number of Siblings/Spouses (SibSp)", y = "Percentage (%)", fill = "Survived") +
+  ggtitle("Survived vs SibSp") +
+  scale_fill_manual(values = c("#CDE4C0", "#F3F579")) +
+  theme_minimal()
+```
+
+**Parch vs Survived**
+
+For the passengers who did not survive:
+<ul>
+- 81.06% of them did not have parents/children aboard.
+- 9.65% had 1 parent/child aboard.
+- 7.29% had 2 parents/children aboard.
+- The rest had between 3 and 6 parents/children aboard, with lower percentages.
+</ul>
+For the passengers who survived:
+<ul>
+- 68.13% of them did not have parents/children aboard.
+- 19.01% had 1 parent/child aboard.
+- 11.70% had 2 parents/children aboard.
+- Only a small fraction had 3 or 5 parents/children aboard.
+</ul>
+Overall, it can be observed that the majority of passengers, both those who survived and those who did not, did not have parents/children aboard. Additionally, there seems to be a trend that passengers with fewer parents/children aboard had a higher survival rate.
+
+```{r}
+# Survived vs Parch
+titanic_train %>% group_by(Survived) %>% count(Parch) %>%  mutate("Percentage (%)"=100*n/sum(n))
+```
+
+Below is the corresponding graph:
+
+```{r}
+# Graph Survived vs Parch
+titanic_train %>%
+  group_by(Survived, Parch) %>%
+  summarise(n = n()) %>%
+  mutate("Percentage (%)" = 100 * n / sum(n)) %>%
+  ggplot(aes(x = as.factor(Parch), y = `Percentage (%)`, fill = as.factor(Survived))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Number of Children/Parents (Parch)", y = "Percentage (%)", fill = "Survived") +
+  ggtitle("Survived vs SibSp") +
+  scale_fill_manual(values = c("#CDE4C0", "#F3F579")) +
+  theme_minimal()
+```
+
+**Fare vs Survived**
+
+When comparing "Fare" and "Survived," the following observations are made:
+<ul>
+- Among travelers who paid between 0 and 50 monetary units, 68% perished while 32% survived, representing the highest number of both deceased and survivors.
+
+- For those who paid between 50 and 100 monetary units, 35% sadly perished, while 65% managed to survive.
+
+- Passengers who paid between 100 and 150 monetary units exhibited a mortality rate of 21%, while 80% were saved.
+
+- In the range of 150 to 200 monetary units, 33% perished and 67% survived.
+
+- For those who paid between 200 and 250 monetary units, the mortality rate was 36%, with 67% survivors.
+
+- In the interval of 250 to 300 monetary units, again, 33% perished and 67% survived.
+
+- Finally, among passengers who paid between 500 and 550 monetary units, 100% managed to survive.
+</ul>
+
+This analysis provides a detailed insight into how the ticket fare correlates with survival rates during the Titanic tragedy.
+
+```{r}
+# Survived vs Age
+tabla_fare <- titanic_train %>%
+  mutate(fare_group = cut(Fare, breaks = seq(0, 550, by = 50), right = FALSE, include.lowest = TRUE)) %>%
+  group_by(fare_group, Survived) %>%
+  summarise(n = n()) %>%
+  group_by(fare_group) %>%
+  mutate("Percentage (%)" = 100 * n / sum(n))
+
+print(tabla_fare)
+```
+
+The following graph shows the "Fare vs Survived" relationship: 
+
+```{r}
+# Gráfica Survived vs Age
+graph_fare <- ggplot(tabla_fare, aes(x = fare_group, y = `Percentage (%)`, fill = as.factor(Survived))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Ticket Fare range", y = "Percentage (%)", fill = "Survived") +
+  ggtitle("Survived vs Fare") +
+  scale_fill_manual(values = c("#CDE4C0", "#F3F579")) +
+  theme_minimal()
+
+print(graph_fare)
+```
+
+**Embarked vs Survived**
+
+Of the 100% of the deceased:
+<ul>
+- 13.66% of passengers embarked at the port of Cherbourg.
+- 8.56% of passengers embarked at the port of Queenstown.
+- 77.8% of passengers embarked at the port of Southampton.
+</ul>
+Of the 100% of the survivors:
+<ul>
+- 27.19% of passengers embarked at the port of Cherbourg.
+- 8.77% of passengers embarked at the port of Queenstown.
+- 63.45% of passengers embarked at the port of Southampton.
+- There are 2 passengers for whom it is unknown where they embarked.
+</ul>
+The port of Southampton is where the highest number of crew members embarked, and the majority of both the deceased and survivors used this port to board.
+
+```{r}
+# Survived vs Embarked
+titanic_train %>% group_by(Survived) %>% count(Embarked) %>%  mutate("Percentage (%)"=100*n/sum(n))
+```
+
+Below is the graph "Survived vs Embarked":
+
+```{r}
+# Graph Survived vs Embarked
+titanic_train %>%
+  group_by(Survived, Embarked) %>%
+  summarise(n = n()) %>%
+  mutate("Percentage (%)" = 100 * n / sum(n)) %>%
+  ggplot(aes(x = as.factor(Embarked), y = `Percentage (%)`, fill = as.factor(Survived))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Port of Embarkation", y = "Percentage (%)", fill = "Survived") +
+  ggtitle("Survived vs Embarked") +
+  scale_fill_manual(values = c("#CDE4C0", "#F3F579")) +
+  theme_minimal()
+```
+
+**Fare vs PClass**
+
+When examining the relationship between the ticket fare ("Fare") and the passenger class ("PClass"), it is observed that those who paid higher fares generally traveled in the first class. However, there are also cases where some passengers in the second and third class paid fares similar to those in the first class.
+
+```{r}
+# Fare boxplot
+boxplot(Fare ~ Pclass, data = titanic_train, 
+        main = 'Fare vs PClass',ylab = 'Fare', col = '#C8FEA9')
+```
+
+```{r}
+titanic_train2 <- titanic_train[, -2]
+view(titanic_train2)
+
+full <- bind_rows(titanic_train2, titanic_test)
+view(full)
+```
+
+Continuing with an exploratory analysis of all the data, including the "train" and "test" sets, where the "Survived" column is removed since the "test" set does not include it. In total, there are 11 columns and 1309 crew members.
+
+It is observed that R is misclassifying the variables, so they will need to be reclassified correctly.
+
+On the other hand, 'Age' has 263 missing values.
+
+In the case of 'Embarked', it does not mark missing values, R is categorizing it incorrectly, but upon closer inspection of the data, it is evident that there are missing values.
+
+Similarly, we notice that there are missing values in 'Cabin', 'Ticket', and 'Name'.
+
+```{r}
+# Numerical summary
+full %>% skim() 
+```
+
+### Data Partition
+
+To begin working with the data, a stratified partition is performed using the "train" data, and a check of the levels is conducted to confirm that the proportions of survivors are very similar in both subsets.
+
+```{r}
+titanic_train$Survived <- factor(titanic_train$Survived)
+
+# 80-20% Partition - 'Survived'"
+set.seed(3615)
+titanic_split <- initial_split(titanic_train, strata = Survived, prop = 0.8)
+titanic_split
+
+# Saving Train & Test
+titanic_train_train <- training(titanic_split)
+titanic_train_test  <- testing(titanic_split)
+
+# Checking levels
+titanic_train_train %>% count(Survived) %>% mutate(porc = 100 * n / sum(n))
+titanic_train_test %>% count(Survived) %>% mutate(porc = 100 * n / sum(n))
+```
+
+### Recipe
+
+The recipe named "recipe_titanic" has been created with the purpose of standardizing and preparing the Titanic dataset for future analysis and modeling. The steps performed in this recipe are as follows:
+<ul>
+- The variable "Survived" is designated as the target variable for the model.
+- Character-type variables are converted into factors to facilitate their handling and analysis.
+- It is specified that the identifiers (IDs) are located in the variable "PassengerID".
+- Missing values (NAs) in the dataset are identified and reported to the model.
+- For missing values in the "Age" and "Fare" variables, the median is used to impute the missing data.
+- For missing values in the "Embarked" variable, the mode method is applied to complete the missing information.
+- The variables "Ticket", "Cabin", and "Name" are removed from the dataset as they are not considered relevant for analysis.
+- Numeric variables are scaled to fit within a range of values between 0 and 1, while nominal variables are converted into binary variables for proper interpretation by the model.
+</ul>
+This recipe provides a solid and consistent foundation for data processing in future machine learning models that utilize this Titanic dataset.
+
+```{r}
+# Recipe: Survived vs the rest. 
+receta_titanic <-
+  
+  # Specifying the target variable
+  recipe(data = titanic_train_train, Survived ~ .) %>%
+
+  # R isn't reading empty values as null, so we tell it to fill any empty values with NA.
+  step_mutate(Embarked=na_if(Embarked, "")) %>%
+  
+  # Transforming "character" variables into factors.
+  step_mutate(across(c(Sex, Embarked, Pclass), as.factor)) %>%
+  
+  # Identifying the IDs
+  update_role(PassengerId, new_role = "ID")%>% 
+  
+  # Imputing the missing values
+  step_impute_median(all_numeric_predictors()) %>%
+  step_impute_mode(all_nominal_predictors()) %>%
+
+  # Deliting variables: Ticket, Cabin and Name
+  step_rm(c(Ticket, Cabin, Name)) %>%
+  
+  # Converting to ordinal and binary, as appropriate.
+  step_range(all_numeric_predictors(), min=0, max=1) %>%
+  step_dummy(all_nominal_predictors())
+  
+receta_titanic
+```
+
+### Baking
+
+The next step involves "baking" the data, once the recipe is ready. This process is carried out for both the training set (Train) and the test set (Test).
+
+```{r}
+# To train
+bake(receta_titanic %>% prep(), new_data = NULL)
+
+# To test
+bake(receta_titanic %>% prep(), new_data = titanic_train_test)
+```
+
+# KNN Model
+
+We proceed to create the model, which includes the following specifications:
+<ul>
+- 10 neighbors will be used to make predictions.
+- A greater influence factor will be applied to the nearest neighbors in the prediction (parameter "inv").
+- Euclidean distance will be used as the distance measure (dist_power=2).
+</ul>
+
+```{r}
+knn_model <-
+  nearest_neighbor(mode = "classification", neighbors = 10,
+                   weight_func = "inv", dist_power = 2) %>%
+  set_engine("kknn")
+knn_model
+```
+
+Now, the recipe and the KNN model are combined to create the Workflow.
+
+```{r}
+# Workflow
+titanic_wf <-
+  workflow() %>%
+  add_recipe(receta_titanic) %>%
+  add_model(knn_model)
+titanic_wf
+```
+
+It's time to implement the Workflow:
+
+```{r}
+# Applying the workflow
+titanic_knn_fit <- titanic_wf %>% fit(data = titanic_train_train)
+titanic_knn_fit
+```
+
+Now the model is applied to the "titanic_train_test" dataset in order to obtain the ROC curve and thus observe the accuracy of the predictions.
+
+```{r}
+# Applying to the test dataset
+predict(titanic_knn_fit, titanic_train_test)
+
+# Predicting probabilities (to be used for ROC)
+predict(titanic_knn_fit, titanic_train_test, type = "prob")
+```
+
+The next step involves integrating the results with passenger information, allowing the observation and comparison of the model with reality ('Survived' vs '.pred_class').
+
+```{r}
+prob_titanic_train_test <- augment(titanic_knn_fit, titanic_train_test)
+print(prob_titanic_train_test, width = Inf)
+glimpse(prob_titanic_train_test)
+```
+
+### Confusion Matrix
+
+The confusion matrix allows contrasting predictions with the actual survival data ('Survived').
+
+The model correctly predicted 96 out of 110 predictions for deceased passengers and 50 out of 69 predictions for surviving passengers.
+
+```{r}
+# Confusion matrix: actual vs predicted
+confmat_titanic_train_test <- prob_titanic_train_test %>%
+  conf_mat(truth = Survived, estimate = .pred_class)
+confmat_titanic_train_test
+
+# Saving the tab
+confmat_titanic_train_test <- as_tibble(confmat_titanic_train_test$table)
+confmat_titanic_train_test
+```
+
+Below, we observe that:
+<ul>
+- 81.56% of the model's predictions are correct.
+- There is a moderate agreement between the model's predictions and the actual data of 0.6055.
+- The model can correctly identify 87.27% of the passengers who actually survived.
+- 72.46% of the passengers who survived were correctly predicted by the model.
+- 83.48% of the model's positive predictions are correct.
+- The model correctly predicted 78.13% of the negative predictions.
+- An MCC of 0.6066 indicates a moderate correlation between the model's predictions and the actual data.
+- There is a good balance between the sensitivity and specificity of the model with a J-Index value of 0.5974.
+- There is a balanced accuracy of 79.87%.
+- 64.25% of the passengers in the sample actually survived.
+</ul>
+
+```{r}
+# Confusion matrix + summary
+metricas_titanic_train_test <-
+  prob_titanic_train_test %>%
+  conf_mat(truth = Survived, estimate = .pred_class) %>%
+  summary()
+metricas_titanic_train_test
+```
+
+```{r}
+# Expanding columns for use in the graph
+confmat_titanic_train_test_ampliada <-
+  confmat_titanic_train_test %>% 
+  group_by(Truth) %>%
+  mutate(class = sum(n), porc_class = round(100 * n / class, 2)) %>%
+  ungroup()
+
+# Visualized confusion matrix
+ggplot(data = confmat_titanic_train_test_ampliada,
+       aes(x = Prediction, y = Truth,
+           fill = porc_class, alpha = porc_class)) +
+  geom_tile() +
+  scale_fill_gradient(low = "#D2B5F2", high = "#450888") +
+  geom_text(aes(label = glue("Total: {round(100 * n / sum(n), 2)}%
+                             vs Class: {porc_class}%")),
+            colour = "black", alpha = 1, size = 5.5,
+            show.legend = FALSE) +
+  labs(x = "Prediction", y = "Real value", fill = "% Data") +
+  guides(alpha = "none") +
+  scale_color_economist()
+```
+
+The ROC curve is calculated for the arbitrary model:
+
+```{r}
+# ROC Curve: actual vs probability of 1
+roc_curve <- prob_titanic_train_test %>% roc_curve(truth = Survived, .pred_0)
+roc_curve %>% autoplot()
+
+# Area under the curve
+auc <- prob_titanic_train_test %>% roc_auc(truth = Survived, .pred_0)
+auc <- auc %>% pull(.estimate)
+auc
+```
+
+### Accuracy, sensitivity, specificity and ROC AUC.
+
+Accuracy: 81.56% of the predictions made by the model are correct.
+
+Sensitivity: 87.27% of positive instances were correctly identified.
+
+Specificity: 72.46% of negative instances were correctly identified.
+
+ROC Curve: The area under the ROC curve value is 0.869, suggesting that the model has good ability to distinguish between positive and negative classes.
+
+```{r}
+# Multiple metrics
+multi_metric <- metric_set(accuracy, sensitivity, specificity, roc_auc)
+metrics <-
+  prob_titanic_train_test %>% 
+  multi_metric(truth = Survived, estimate = .pred_class, .pred_0)
+acc <- metrics %>% filter(.metric == "accuracy") %>% pull(.estimate)
+metrics
+```
+
+Below is the representation of the ROC curve in a graph:
+
+```{r}
+# ROC curve
+ggplot(roc_curve, aes(x = 1 - specificity, y = sensitivity)) +
+  geom_line(lwd = 1, alpha = 0.85, color = "#9B4CF5") +
+  geom_abline(lty = 2) +
+  coord_equal() +
+  labs(x = "1 - Specificity (False Positive Rate)",
+       y = "Sensitivity (True Positive Rate)",
+       title = "ROC curve", 
+       subtitle = glue("Metrics (test): AUC = {round(auc, 3)}, Accuracy = {round(100 * acc, 3)}%"),
+       caption =
+         paste0("Author: Vanessa HS.                                                      ",
+                "Data: (Titanic.csv)")) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The previous model was built with a specification of 10 neighbors in the k-nearest neighbors (k-NN) algorithm. Now, we proceed to let R determine the optimal number of neighbors to use.
+
+### Tuning
+
+In this step, R will carry out automatic selection of the optimal number of neighbors, the best weight, and the best distance for the k-NN algorithm. Then, the same previously created workflow is used. Lastly, the parameters to be optimized will be those of the workflow used earlier.
+
+Workflow Summary:
+
+```{r}
+# Tuned model
+knn_model <-
+  nearest_neighbor(mode = "classification",
+                   neighbors = tune("k"),
+                   weight_func = tune("weight"),
+                   dist_power = tune("dist")) %>%
+  set_engine("kknn")
+
+# Workflow
+titanic_wflow <-
+  workflow() %>%
+  add_recipe(receta_titanic) %>%
+  add_model(knn_model)
+titanic_wflow
+
+# Parameters to optimize
+param <- parameters(titanic_wflow)
+param$object
+```
+
+### Parameter Grid
+
+A grid is created that includes the values among which the selection should be made.
+
+```{r}
+# Parameters grid
+grid_knn <-
+  parameters(titanic_wflow) %>%
+  # Update
+  update(k = neighbors(range = c(5, 45)), #k-neighbors range from 5 to 45
+         weight = weight_func(values = c("inv", "gaussian")),
+         dist = dist_power(range = c(0.5, 2))) %>% #distance 0.5 & 2
+  grid_regular(levels = 4) #dividing from 5 to 45 in 4 levels
+grid_knn
+```
+
+### Cross-validation
+
+Cross-validation is performed by dividing the model into 10 equal parts, and then training and evaluating it 10 times, each time using a different fold as the test set and the remaining as the training set. The aim is to maximize the model's efficiency and to help detect overfitting or underfitting problems by evaluating the model's performance on multiple test datasets.
+
+```{r}
+# Cross-validation
+folds <- vfold_cv(titanic_train_train, v = 10, strata = Survived)
+folds
+```
+
+```{r}
+# Testing all models using a validation set
+titanic_knn_fit_tune <- 
+  titanic_wflow %>% 
+  tune_grid(resamples = folds, grid = grid_knn,
+            control = control_grid(verbose = TRUE),
+            metrics = multi_metric)
+titanic_knn_fit_tune
+
+# Metrics
+titanic_knn_fit_tune %>% collect_metrics()
+```
+
+Due to the large number of results, the top 5 in accuracy and ROC are selected:
+
+```{r}
+# Best model based on Accuracy & ROC
+titanic_knn_fit_tune %>% show_best("accuracy")
+titanic_knn_fit_tune %>% show_best("roc_auc")
+```
+
+Graph with the results:
+
+```{r}
+# Visual comparison
+titanic_knn_fit_tune %>%
+  collect_metrics() %>%
+  mutate(dist = factor(dist), weight = factor(weight)) %>%
+  ggplot(aes(k, mean, color = dist, shape = weight)) +
+  geom_line(size = 1, alpha = 0.5) +
+  geom_point(size = 2) +
+  # 2 rows(accurancy, roc_auc)
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_color_tableau(labels = glue("p = {c(0.5, 1, 1.5, 2)}")) +
+  labs(y = "Average",
+       color = "Metric (Minkowski)",
+       shape = "Weighting",
+       title = glue("Comparison of KNN models (validation with v-folds using v = {nrow(folds)})"),
+       subtitle = "Tested Parameters: Neighbors / Weighting / Distance",
+       caption =
+         paste0("Author: Vanessa HS     |     ",
+                "Dataset: Tidymodels (titanic.csv)"))
+```
+
+The top 5 are selected based on Accuracy:
+
+```{r}
+# Best according to Accuracy
+best_knn <- titanic_knn_fit_tune %>%
+  select_best("accuracy")
+best_knn
+
+best_knn_std_error <- titanic_knn_fit_tune %>%
+  select_by_one_std_err(metric = "accuracy", k)
+
+# End flow with the last one selected by standard error
+final_wf <- 
+  titanic_wflow %>% 
+  finalize_workflow(best_knn_std_error)
+final_wf
+
+# Adjustment with the selected model in validation
+final_fit <- 
+  final_wf %>%
+  last_fit(titanic_split) 
+final_fit
+
+# Calculation of metrics on test
+final_fit %>% collect_metrics()
+
+# Final workflow
+extract_workflow(final_fit)
+```
+
+Now we can construct the top 3 final models.
+
+# Final KNN models
+
+```{r}
+# 3 models
+knn_model_1 <- titanic_wflow %>%
+  update_model(knn_model %>% set_args(neighbors = 31, 
+                                      weight_func = "gaussian", 
+                                      dist_power = 0.5))
+
+knn_model_2 <- titanic_wflow %>%
+  update_model(knn_model %>% set_args(neighbors = 5, 
+                                      weight_func = "gaussian", 
+                                      dist_power = 0.5))
+
+knn_model_3 <- titanic_wflow %>%
+  update_model(knn_model %>% set_args(neighbors = 31, 
+                                      weight_func = "gaussian", 
+                                      dist_power = 1))
+
+# Application of flows
+knn_fit_1 <- knn_model_1 %>% fit(data = titanic_train_train)
+knn_fit_2 <- knn_model_2 %>% fit(data = titanic_train_train)
+knn_fit_3 <- knn_model_3 %>% fit(data = titanic_train_train)
+
+
+# Saving the models
+models <- list("knn_1" = knn_fit_1, "knn_2" = knn_fit_2,
+               "knn_3" = knn_fit_3)
+```
+
+Below are the predictions of the 3 models, where it is observed that the area under the AUC curve is wide, indicating that the probability of the models correctly classifying whether a crew member survived or not is high.
+
+```{r}
+pred_probs <- imap_dfr(models, augment,
+                       new_data = titanic_train_test, .id = "model")
+
+# 'Survived' y the predictions
+pred_probs <- pred_probs %>%
+  select(model, Survived, .pred_class, .pred_0, .pred_1)
+pred_probs
+
+# Joint metrics
+metrics <-
+  pred_probs %>% 
+  group_by(model) %>%
+  multi_metric(truth = Survived, estimate = .pred_class, .pred_0)
+metrics
+
+# ROC curves
+roc_curves <-
+  pred_probs %>% group_by(model) %>%
+  roc_curve(Survived, .pred_0)
+roc_curves %>% autoplot()
+```
+
+### Files for Kaggle and Results
+
+The results of the 3 KNN models are saved to upload them to the Kaggle website in order to see the rate of correctly classified instances.
+
+```{r}
+# Saving the results
+knn1 <- augment(knn_fit_1, titanic_test)
+knn2 <- augment(knn_fit_2, titanic_test)
+knn3 <- augment(knn_fit_3, titanic_test)
+ 
+knn1 <- knn1 %>% mutate(Survived = .pred_class)
+knn2 <- knn2 %>% mutate(Survived = .pred_class)
+knn3 <- knn3 %>% mutate(Survived = .pred_class)
+ 
+knn1 <- knn1 %>% select(c(PassengerId, Survived))
+knn2 <- knn2 %>% select(c(PassengerId, Survived))
+knn3 <- knn3 %>% select(c(PassengerId, Survived))
+ 
+write.csv(knn1, "knn1.csv", row.names = F)
+write.csv(knn2, "knn2.csv", row.names = F)
+write.csv(knn3, "knn3.csv", row.names = F)
+```
+
+The results obtained on Kaggle are as follows:
+
+```{r}
+# Image
+knitr::include_graphics("C:/Users/vanny/OneDrive/Escritorio/Portfolio/kaggle__titanicKNN_results.png")
+```
+

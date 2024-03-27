@@ -2,10 +2,10 @@
 
 This challenge, extracted from Kaggle (https://www.kaggle.com/competitions/titanic/overview), poses the task of using machine learning to develop a model capable of predicting which passengers survived the Titanic sinking.
 
-![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/62273b2c-46b1-483d-8747-4177830eca49)
+![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/0984990e-8713-4a7b-a578-a33d6fbbba02)
 
-![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/eb0122ad-b6cf-4d4b-b3f5-32c03432b233)
+![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/78ce90f2-cfa1-49ec-83f9-346431b4d81f)
 
-![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/016fc9b8-92fa-4390-97d7-6a3b13962d16)
+![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/7022c27b-b4a2-4db5-9e3e-de4a29737efe)
 
-![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/2cfd0574-7e14-4a25-9100-c5ba8e73e45b)
+![image](https://github.com/vanessaherrada/TitanicKNN_english_R/assets/163647765/0f5b9dca-069d-470c-9ecf-1fdc39d4fed5)
